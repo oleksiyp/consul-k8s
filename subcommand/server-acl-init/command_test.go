@@ -1493,68 +1493,71 @@ func TestRun_HTTPS(t *testing.T) {
 func TestRun_ACLReplicationTokenValid(t *testing.T) {
 	t.Parallel()
 
-	// Set up the primary DC first.
-	primarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
-		c.ACL.Enabled = true
-	})
-	require.NoError(t, err)
-	defer primarySvr.Stop()
+	//// Set up the primary DC first.
+	//primarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
+	//	c.ACL.Enabled = true
+	//})
+	//require.NoError(t, err)
+	//defer primarySvr.Stop()
+	//
+	//primaryK8s := fake.NewSimpleClientset()
+	//createTestK8SResources(t, primaryK8s, primarySvr.HTTPAddr, resourcePrefix, "http", ns)
+	//require.NoError(t, err)
+	//
+	//// Run the command to bootstrap ACLs
+	//primaryUI := cli.NewMockUi()
+	//primaryCmd := Command{
+	//	UI:        primaryUI,
+	//	clientset: primaryK8s,
+	//}
+	//primaryCmd.init()
+	//primaryCmdArgs := []string{
+	//	"-k8s-namespace=" + ns,
+	//	"-expected-replicas=1",
+	//	"-server-label-selector=component=server,app=consul,release=" + releaseName,
+	//	"-resource-prefix=" + resourcePrefix,
+	//	"-create-acl-replication-token",
+	//}
+	//responseCode := primaryCmd.Run(primaryCmdArgs)
+	//require.Equal(t, 0, responseCode, primaryUI.ErrorWriter.String())
+	//
+	//// Retrieve the replication ACL token from the kubernetes secret.
+	//tokenSecret, err := primaryK8s.CoreV1().Secrets(ns).Get("release-name-consul-acl-replication-acl-token", metav1.GetOptions{})
+	//require.NoError(t, err)
+	//require.NotNil(t, tokenSecret)
+	//aclReplicationTokenBytes, ok := tokenSecret.Data["token"]
+	//require.True(t, ok)
+	//aclReplicationToken := string(aclReplicationTokenBytes)
+	//
+	//// Now we can set up the secondary DC.
+	//secondarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
+	//	c.Datacenter = "dc2"
+	//	c.ACL.Enabled = true
+	//	c.ACL.TokenReplication = true
+	//	c.PrimaryDatacenter = "dc1"
+	//	// When running via the Helm chart these are passed in to the servers.
+	//	c.ACL.Tokens.Agent = aclReplicationToken
+	//	c.ACL.Tokens.Replication = aclReplicationToken
+	//})
+	//require.NoError(t, err)
+	//defer secondarySvr.Stop()
+	//
+	//bootToken := getBootToken(t, primaryK8s, resourcePrefix, ns)
+	//secondaryConsulClient, err := api.NewClient(&api.Config{
+	//	Address: secondarySvr.HTTPAddr,
+	//	// When running via Helm, the WAN join config is set in the server config
+	//	// however that config isn't exposed by the testutil server so instead we need to
+	//	// make the join API call. This requires the bootstrap token permissions.
+	//	Token:   bootToken,
+	//})
+	//err = secondaryConsulClient.Agent().Join(primarySvr.WANAddr, true)
+	//require.NoError(t, err)
+	//
+	//secondaryK8s := fake.NewSimpleClientset()
+	//createTestK8SResources(t, secondaryK8s, secondarySvr.HTTPAddr, resourcePrefix, "http", ns)
 
-	primaryK8s := fake.NewSimpleClientset()
-	createTestK8SResources(t, primaryK8s, primarySvr.HTTPAddr, resourcePrefix, "http", ns)
-	require.NoError(t, err)
-
-	// Run the command to bootstrap ACLs
-	primaryUI := cli.NewMockUi()
-	primaryCmd := Command{
-		UI:        primaryUI,
-		clientset: primaryK8s,
-	}
-	primaryCmd.init()
-	primaryCmdArgs := []string{
-		"-k8s-namespace=" + ns,
-		"-expected-replicas=1",
-		"-server-label-selector=component=server,app=consul,release=" + releaseName,
-		"-resource-prefix=" + resourcePrefix,
-		"-create-acl-replication-token",
-	}
-	responseCode := primaryCmd.Run(primaryCmdArgs)
-	require.Equal(t, 0, responseCode, primaryUI.ErrorWriter.String())
-
-	// Retrieve the replication ACL token from the kubernetes secret.
-	tokenSecret, err := primaryK8s.CoreV1().Secrets(ns).Get("release-name-consul-acl-replication-acl-token", metav1.GetOptions{})
-	require.NoError(t, err)
-	require.NotNil(t, tokenSecret)
-	aclReplicationTokenBytes, ok := tokenSecret.Data["token"]
-	require.True(t, ok)
-	aclReplicationToken := string(aclReplicationTokenBytes)
-
-	// Now we can set up the secondary DC.
-	secondarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
-		c.Datacenter = "dc2"
-		c.ACL.Enabled = true
-		c.ACL.TokenReplication = true
-		c.PrimaryDatacenter = "dc1"
-		// When running via the Helm chart these are passed in to the servers.
-		c.ACL.Tokens.Agent = aclReplicationToken
-		c.ACL.Tokens.Replication = aclReplicationToken
-	})
-	require.NoError(t, err)
-	defer secondarySvr.Stop()
-
-	// When running via Helm, the WAN join config is set in the server config
-	// however that config isn't exposed by the testutil server so instead we need to
-	// make the join API call. This requires the bootstrap token permissions.
-	bootToken := getBootToken(t, primaryK8s, resourcePrefix, ns)
-	secondaryConsulClient, err := api.NewClient(&api.Config{
-		Address: secondarySvr.HTTPAddr,
-		Token:   bootToken,
-	})
-	err = secondaryConsulClient.Agent().Join(primarySvr.WANAddr, true)
-	require.NoError(t, err)
-
-	secondaryK8s := fake.NewSimpleClientset()
-	createTestK8SResources(t, secondaryK8s, secondarySvr.HTTPAddr, resourcePrefix, "http", ns)
+	secondaryK8s, secondaryConsulClient, aclReplicationToken, clean2 := completeReplicatedSetup2(t, resourcePrefix, "", true)
+	defer clean2()
 
 	// Now we're ready to run the command on in our secondary dc.
 	tokenFile, cleanup := writeTempFile(t, aclReplicationToken)
@@ -1575,7 +1578,7 @@ func TestRun_ACLReplicationTokenValid(t *testing.T) {
 		"-create-client-token",
 		"-create-mesh-gateway-token",
 	}
-	responseCode = secondaryCmd.Run(secondaryCmdArgs)
+	responseCode := secondaryCmd.Run(secondaryCmdArgs)
 	require.Equal(t, 0, responseCode, secondaryUI.ErrorWriter.String())
 
 	// Test that replication was successful.
@@ -1650,6 +1653,92 @@ func completeSetup(t *testing.T, prefix string) (*fake.Clientset, *testutil.Test
 	createTestK8SResources(t, k8s, svr.HTTPAddr, prefix, "http", ns)
 
 	return k8s, svr
+}
+
+// Set up two Consul servers with ACL replication.
+// Returns the Kubernetes client for the secondary DC,
+// a Consul API client initialized for the secondary DC and a
+// cleanup function that should be called at the end of the test that cleans
+// up resources.
+func completeReplicatedSetup2(t *testing.T, prefix string, bootToken string, useCmd bool) (*fake.Clientset, *api.Client, string, func()) {
+	t.Helper()
+
+	primarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
+		c.ACL.Enabled = true
+		if !useCmd {
+			c.ACL.Tokens.Master = bootToken
+		}
+	})
+	require.NoError(t, err)
+
+	var aclReplicationToken string
+	if useCmd {
+		primaryK8s := fake.NewSimpleClientset()
+		createTestK8SResources(t, primaryK8s, primarySvr.HTTPAddr, resourcePrefix, "http", ns)
+		require.NoError(t, err)
+
+		// Run the command to bootstrap ACLs
+		primaryUI := cli.NewMockUi()
+		primaryCmd := Command{
+			UI:        primaryUI,
+			clientset: primaryK8s,
+		}
+		primaryCmd.init()
+		primaryCmdArgs := []string{
+			"-k8s-namespace=" + ns,
+			"-expected-replicas=1",
+			"-server-label-selector=component=server,app=consul,release=" + releaseName,
+			"-resource-prefix=" + resourcePrefix,
+			"-create-acl-replication-token",
+		}
+		responseCode := primaryCmd.Run(primaryCmdArgs)
+		require.Equal(t, 0, responseCode, primaryUI.ErrorWriter.String())
+
+		// Retrieve the replication ACL token from the kubernetes secret.
+		tokenSecret, err := primaryK8s.CoreV1().Secrets(ns).Get("release-name-consul-acl-replication-acl-token", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, tokenSecret)
+		aclReplicationTokenBytes, ok := tokenSecret.Data["token"]
+		require.True(t, ok)
+		aclReplicationToken = string(aclReplicationTokenBytes)
+		bootToken = getBootToken(t, primaryK8s, prefix, ns)
+	}
+
+	// Set up the secondary server that will federate with the primary.
+	secondarySvr, err := testutil.NewTestServerConfigT(t, func(c *testutil.TestServerConfig) {
+		c.Datacenter = "dc2"
+		c.ACL.Enabled = true
+		c.ACL.TokenReplication = true
+		c.PrimaryDatacenter = "dc1"
+		if useCmd {
+			c.ACL.Tokens.Agent = aclReplicationToken
+			c.ACL.Tokens.Replication = aclReplicationToken
+		} else {
+			c.ACL.Tokens.Agent = bootToken
+			c.ACL.Tokens.Replication = bootToken
+		}
+	})
+	require.NoError(t, err)
+
+	// Our consul client will use the secondary dc.
+	consul, err := api.NewClient(&api.Config{
+		Address: secondarySvr.HTTPAddr,
+		Token:   bootToken,
+	})
+	require.NoError(t, err)
+
+	// WAN join the primary and secondary.
+	err = consul.Agent().Join(primarySvr.WANAddr, true)
+	require.NoError(t, err)
+
+	// Finally, set up our kube cluster. It will use the secondary dc.
+	k8s := fake.NewSimpleClientset()
+	createTestK8SResources(t, k8s, secondarySvr.HTTPAddr, prefix, "http", ns)
+
+	return k8s, consul, aclReplicationToken, func() {
+		primarySvr.Stop()
+		secondarySvr.Stop()
+	}
 }
 
 // Set up two Consul servers with ACL replication.
