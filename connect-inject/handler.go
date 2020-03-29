@@ -72,6 +72,11 @@ const (
 	// e.g. consul.hashicorp.com/service-meta-foo:bar
 	annotationMeta = "consul.hashicorp.com/service-meta-"
 
+	// httpChecks is a list of HTTP endpoints available externally via port 20001
+	// and representing health-checks. This is specified in the format
+	//`/endpoint1,/endpoint2,...`
+	httpChecks = "consul.hashicorp.com/connect-service-exposed-http-checks"
+
 	// annotationSyncPeriod controls the -sync-period flag passed to the
 	// consul-k8s lifecycle-sidecar command. This flag controls how often the
 	// service is synced (i.e. re-registered) with the local agent.

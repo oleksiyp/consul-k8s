@@ -29,6 +29,7 @@ type initContainerCommandData struct {
 	Upstreams                 []initContainerCommandUpstreamData
 	Tags                      string
 	Meta                      map[string]string
+	Checks                    []string
 
 	// The PEM-encoded CA certificate to use when
 	// communicating with Consul clients
@@ -157,6 +158,13 @@ func (h *Handler) containerInit(pod *corev1.Pod, k8sNamespace string) (corev1.Co
 			}
 		}
 	}
+
+	var checks []string
+	if raw, ok := pod.Annotations[httpChecks]; ok && raw != "" {
+		checks = strings.Split(raw, ",")
+	}
+
+	data.Checks = checks
 
 	// Create expected volume mounts
 	volMounts := []corev1.VolumeMount{
@@ -292,6 +300,20 @@ services {
       {{- end}}
     }
     {{- end }}
+    {{- if .Checks }}
+    {{- if (gt .ServicePort 0) }}
+    expose { 
+    {{- range .Checks }}
+      paths {
+        path = "{{.}}",
+        local_path_port = {{ $.ServicePort }},
+        listener_port = 20001,
+        protocol = "http2"
+      }
+    {{- end }}
+    }
+    {{- end }}
+    {{- end }}
   }
 
   checks {
@@ -305,6 +327,15 @@ services {
     name = "Destination Alias"
     alias_service = "{{ .ServiceName }}"
   }
+
+  {{- range .Checks }}
+  checks {
+    name = "Exposed check {{.}}"
+    http = "http://${POD_IP}:20001{{.}}"
+    interval = "10s"
+    deregister_critical_service_after = "10m"
+  }
+  {{- end }}
 }
 
 services {
